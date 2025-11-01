@@ -1,0 +1,39 @@
+{
+  "name": "weather-mcp-app",
+  "version": "1.0.0",
+  "description": "Weather Dashboard Widget for ChatGPT using Fractal MCP SDK",
+  "type": "module",
+  "main": "dist/server/index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build:ui": "fractal-mcp bundle --entrypoint=./src/ui/WeatherWidget.tsx --out=./dist/ui",
+    "build:server": "tsc",
+    "build": "npm run build:ui && npm run build:server",
+    "dev": "npm run build && node dist/server/index.js",
+    "start": "node dist/server/index.js",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["mcp", "chatgpt", "weather", "widget"],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "@fractal-mcp/oai-hooks": "latest",
+    "@fractal-mcp/oai-server": "latest",
+    "express": "^4.18.2",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@fractal-mcp/bundle": "latest",
+    "@fractal-mcp/cli": "latest",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.10.0",
+    "@types/react": "^18.2.45",
+    "@types/react-dom": "^18.2.18",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "recharts": "^2.10.0",
+    "typescript": "^5.3.3"
+  }
+}
