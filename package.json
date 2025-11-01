@@ -8,6 +8,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "npm run build:ui && npm run build:server",
+    "build:ui": "npx @fractal-mcp/cli bundle --entrypoint=./ui/main.tsx --out=./ui/bundle --root-only --inline-js --inline-css",
+    "build:server": "tsc",
     "dev:server": "tsx watch server/index.ts"
   },
   "dependencies": {
