@@ -3,82 +3,107 @@ import {
   registerOpenAIWidget, 
   startOpenAIWidgetHttpServer
 } from "@fractal-mcp/oai-server";
-import { bundleJSEntrypoint, bundleReactComponent } from "@fractal-mcp/bundle";
 import { fileURLToPath } from "url";
 import { dirname, resolve } from "path";
 import { readFile } from "fs/promises";
 import { z } from "zod";
-
+import express from "express";
 import http from "http";
 import fs from "fs";
 import path from "path";
 import url from "url";
+import fetch from "node-fetch";
+
+const app = express();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Create a simple MCP server with async initialization
+//
+// === MCP SERVER FACTORY ===
+//
 const createMcpServer = async () => {
   const server = new McpServer({
-    name: "example-oai-server",
+    name: "weather-mcp",
     version: "1.0.0"
   });
 
-  // Bundle the React component with EVERYTHING INLINED
+  // ---- Load bundled UI ----
   console.log("Bundling widget UI with inline assets...");
-  const bundleOutDir = resolve(__dirname, '../ui/bundle');
-  // await bundleReactComponent({
-  //   entrypoint: resolve(__dirname, '../ui/Component.tsx'),
-  //   out: bundleOutDir,
-  //   output: {
-  //     type: 'html',
-  //     inline: { js: true, css: true },
-  //     rootOnly: false  // Just the snippet, no <html> wrapper
-  //   }
-  // });
-  
-  // Read the fully inlined HTML
-  const widgetHtml = await readFile(resolve(bundleOutDir, 'index.html'), 'utf-8');
-  console.log(`Widget UI bundled! Size: ${widgetHtml.length} bytes`);
+  const bundleOutDir = resolve(__dirname, "../ui/bundle");
+  const widgetHtml = await readFile(resolve(bundleOutDir, "index.html"), "utf-8");
+  console.log(`✅ Widget UI loaded (${widgetHtml.length} bytes)`);
 
-  const widgetHtml2 =`
-<div id="root"></div>
-<link rel="stylesheet" href="https://persistent.oaistatic.com/ecosystem-built-assets/pizzaz-albums-0038.css">
-<script type="module" src="https://persistent.oaistatic.com/ecosystem-built-assets/pizzaz-albums-0038.js"></script>
-`
-  // Register a simple widget
-  registerOpenAIWidget(
-    server,
+  //
+  // === TOOL: get-weather ===
+  //
+  server.registerTool(
+    "get-weather",
     {
-      id: "hello-widget",
-      title: "Hello Widget",
-      templateUri: "ui://widget/hello",
-      invoking: "Creating hello widget...",
-      invoked: "Hello widget created",
-      html: widgetHtml,
-      responseText: "Widget displayed successfully",
-      inputSchema: z.object({
-        name: z.string().describe("Name to greet")
-      }),
-      description: "A simple hello widget"
+      title: "Get Weather",
+      description: "Lấy thông tin thời tiết theo thành phố",
+      inputSchema: {
+        city: z.string().describe("Tên thành phố cần xem thời tiết"),
+      },
+      outputSchema: {
+        city: z.string(),
+        temperature: z.string(),
+        condition: z.string(),
+        humidity: z.string(),
+        wind: z.string(),
+      }
     },
-    async (args) => {
+    async ({ city }: any) => {
+      // Ở đây bạn có thể gọi API thật, hoặc mock dữ liệu:
+      const weather = {
+        city,
+        temperature: "26°C",
+        condition: "Nắng nhẹ",
+        humidity: "68%",
+        wind: "14 km/h",
+      };
+
       return {
+        // human-readable content expected by the MCP handler types
         content: [
           {
             type: "text",
-            text: `Hello, ${args.name}!`
+            text: `Thời tiết tại ${weather.city}: ${weather.temperature}, ${weather.condition}`
           }
         ],
-        structuredContent: {
-          name: args.name,
-          timestamp: new Date().toISOString()
-        }
+        // structuredContent holds the typed output payload
+        structuredContent: weather
       };
     }
   );
 
-  // ✅ Gắn patch vào server.close() để tránh loop onclose()
+  //
+  // === WIDGET: Weather Widget ===
+  //
+  registerOpenAIWidget(
+    server,
+    {
+      id: "weather-widget",
+      title: "Weather",
+      templateUri: "ui://widget/weather",
+      invoking: "Đang tải thông tin thời tiết...",
+      invoked: "Thông tin thời tiết đã được tải!",
+      html: widgetHtml, // từ ui/bundle/index.html
+      responseText: "Weather widget displayed",
+      inputSchema: z.object({
+        city: z.string().describe("Tên thành phố cần xem thời tiết")
+      }),
+      description: "Widget hiển thị thông tin thời tiết"
+    },
+    async (args) => ({
+      content: [{ type: "text", text: `Hiển thị thời tiết cho ${args.city}` }],
+      structuredContent: { city: args.city },
+    })
+  );
+
+  //
+  // Safe close patch
+  //
   const originalClose = server.close.bind(server);
   let closing = false;
   server.close = async () => {
@@ -94,19 +119,22 @@ const createMcpServer = async () => {
   return server;
 };
 
-// Start the HTTP server with SSE transport
-const httpServer = startOpenAIWidgetHttpServer({
+//
+// === Start the MCP HTTP server ===
+//
+startOpenAIWidgetHttpServer({
   port: 8001,
   serverFactory: createMcpServer
 });
 
-console.log("OpenAI widget server starting on http://localhost:8001");
+console.log("🚀 MCP widget server running at http://localhost:8001");
 
-
-// Serve static files from /ui/bundle
+//
+// === Serve static UI files ===
+//
 const serveStatic = http.createServer((req, res) => {
   const parsedUrl = url.parse(req.url || "");
-  let pathname = `.${parsedUrl.pathname}`;
+  const pathname = `.${parsedUrl.pathname}`;
   const filePath = path.join(__dirname, "..", pathname);
 
   fs.readFile(filePath, (err, data) => {
@@ -130,6 +158,8 @@ const serveStatic = http.createServer((req, res) => {
     res.end(data);
   });
 });
+
+app.use("/ui", express.static(path.resolve(__dirname, "../ui")));
 
 serveStatic.listen(8080, () => {
   console.log("🌐 Static UI server running at http://localhost:8080/ui/bundle/index.html");
